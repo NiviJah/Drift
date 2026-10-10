@@ -1,0 +1,120 @@
+{
+  "expo": {
+    "name": "Drift",
+    "slug": "drift-sleep-sounds",
+    "scheme": "drift",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#070B18",
+    "description": "Sleep sounds & white noise mixer: layer rain, ocean, fan, brown noise and more with per-sound volume, saved mixes and a gently fading sleep timer.",
+    "githubUrl": "https://github.com/NiviJah/foodLog",
+    "ios": {
+      "bundleIdentifier": "com.nivijah.drift",
+      "supportsTablet": true,
+      "requireFullScreen": false,
+      "infoPlist": {
+        "CFBundleDisplayName": "Drift",
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSMicrophoneUsageDescription": "Drift never records audio. iOS requires this description because the audio engine Drift uses also supports recording."
+      },
+      "privacyManifests": {
+        "NSPrivacyTracking": false,
+        "NSPrivacyTrackingDomains": [],
+        "NSPrivacyCollectedDataTypes": [],
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": [
+              "CA92.1"
+            ]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryFileTimestamp",
+            "NSPrivacyAccessedAPITypeReasons": [
+              "C617.1"
+            ]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategorySystemBootTime",
+            "NSPrivacyAccessedAPITypeReasons": [
+              "35F9.1"
+            ]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryDiskSpace",
+            "NSPrivacyAccessedAPITypeReasons": [
+              "E174.1"
+            ]
+          }
+        ]
+      }
+    },
+    "android": {
+      "package": "com.nivijah.drift",
+      "adaptiveIcon": {
+        "backgroundColor": "#0B1024",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": true,
+      "permissions": [
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.WAKE_LOCK",
+        "android.permission.VIBRATE"
+      ],
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single",
+      "name": "Drift \u2014 Sleep Sounds",
+      "shortName": "Drift",
+      "themeColor": "#070B18",
+      "backgroundColor": "#070B18"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "react-native-audio-api",
+        {
+          "iosBackgroundMode": true,
+          "androidForegroundService": true,
+          "androidFSTypes": [
+            "mediaPlayback"
+          ],
+          "androidPermissions": [
+            "android.permission.FOREGROUND_SERVICE",
+            "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+            "android.permission.POST_NOTIFICATIONS"
+          ],
+          "androidFSStopWithTask": true
+        }
+      ],
+      "expo-font",
+      "expo-asset",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#070B18"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
