@@ -49,6 +49,10 @@ scripts/            brand/icon renderer and store screenshot capture (Playwright
 __tests__/          Jest tests (DSP, fade math, catalog, store)
 ```
 
+## Try it on Android
+
+A test APK (arm64, debug-signed) is on the [`apk` branch](https://github.com/NiviJah/Drift/tree/apk). Download `Drift-1.0.0-test.apk` on your phone and allow installs from your browser or file manager when asked.
+
 ## Development
 
 ```bash

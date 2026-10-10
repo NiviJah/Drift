@@ -9,7 +9,7 @@
     "userInterfaceStyle": "dark",
     "backgroundColor": "#070B18",
     "description": "Sleep sounds & white noise mixer: layer rain, ocean, fan, brown noise and more with per-sound volume, saved mixes and a gently fading sleep timer.",
-    "githubUrl": "https://github.com/NiviJah/foodLog",
+    "githubUrl": "https://github.com/NiviJah/Drift",
     "ios": {
       "bundleIdentifier": "com.nivijah.drift",
       "supportsTablet": true,
