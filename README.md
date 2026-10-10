@@ -134,6 +134,8 @@ Cloud builds with [EAS](https://docs.expo.dev/eas/) — no Mac required.
 5. `npx eas-cli@latest submit --platform ios` / `--platform android` (Play: save the service-account key as `secrets/google-play-service-account.json`; the first upload must be manual)
 6. Copy listing text, keywords, privacy answers and review notes from [`store/listing.md`](store/listing.md); screenshots are in [`store/screenshots/`](store/screenshots)
 
+**Test APKs on GitHub Releases** are built automatically by [`.github/workflows/release.yml`](.github/workflows/release.yml): bump `version` in `app.json`, add `release-notes/v<version>.md`, and push to `main`.
+
 A quick test APK without EAS: `npx expo prebuild --platform android && cd android && ./gradlew assembleRelease`.
 
 ## Privacy
