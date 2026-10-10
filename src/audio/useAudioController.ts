@@ -3,12 +3,20 @@ import { useEffect } from 'react';
 import { Platform } from 'react-native';
 import { AudioManager, PlaybackNotificationManager } from 'react-native-audio-api';
 
+import { showToast } from '../components/Toast';
 import { FEATURED_PRESETS } from '../state/presets';
 import { useStore } from '../state/store';
 import { SOUND_BY_ID } from './catalog';
+import { describeError, logEvent } from './diagnostics';
 import { engine } from './engine';
 
 const KEEP_AWAKE_TAG = 'drift-playback';
+/**
+ * Pause commands and focus losses that arrive this soon after playback starts are ignored.
+ * Car head units and some Bluetooth devices fire a play/pause toggle (or briefly take audio
+ * focus) the moment a new media session starts, which would otherwise stop playback instantly.
+ */
+const START_GRACE_MS = 2500;
 const isNative = Platform.OS !== 'web';
 
 /** A friendly title for the lock screen / notification. */
@@ -34,8 +42,20 @@ function configureSession(mixWithOthers: boolean): void {
     });
     // Take full audio focus unless the user wants to layer us under other apps.
     AudioManager.observeAudioInterruptions(mixWithOthers ? false : 'gain');
+    logEvent(`session: configured (mixWithOthers=${mixWithOthers})`);
   } catch (e) {
     console.warn('[audio] session config failed', e);
+    logEvent(`session: config failed (${describeError(e)})`);
+  }
+}
+
+/** Android grants audio focus per request; ask again on every play so we hold it over Bluetooth/car audio. */
+function requestFocus(mixWithOthers: boolean): void {
+  if (Platform.OS !== 'android' || mixWithOthers) return;
+  try {
+    AudioManager.observeAudioInterruptions('gain');
+  } catch (e) {
+    logEvent(`session: focus request failed (${describeError(e)})`);
   }
 }
 
@@ -86,10 +106,19 @@ export function useAudioController(): void {
 
     let wasInterrupted = false;
     let resumeTimeout: ReturnType<typeof setTimeout> | null = null;
+    let playStartedAt = 0;
+    const inStartGrace = () => Date.now() - playStartedAt < START_GRACE_MS;
 
     const syncPlayback = (s: ReturnType<typeof useStore.getState>) => {
+      logEvent(s.isPlaying ? `play requested (${Object.keys(s.mix).join(', ') || 'empty mix'})` : 'pause requested');
+      if (s.isPlaying) {
+        playStartedAt = Date.now();
+        requestFocus(s.settings.mixWithOthers);
+      }
       engine.setPlaying(s.isPlaying, s.settings.fadeInSeconds).catch((e) => {
         console.warn('[audio] transport failed', e);
+        logEvent(`transport failed (${describeError(e)})`);
+        showToast('Couldn’t start audio on this output. See Settings → Playback diagnostics.');
         useStore.setState({ isPlaying: false });
       });
       if (isNative) AudioManager.setAudioSessionActivity(s.isPlaying).catch(() => undefined);
@@ -124,8 +153,13 @@ export function useAudioController(): void {
     const subs = [
       AudioManager.addSystemEventListener('interruption', (event) => {
         const s = useStore.getState();
+        logEvent(`os: interruption ${event.type} (shouldResume=${event.shouldResume})`);
         if (event.type === 'began') {
-          if (s.isPlaying) {
+          if (s.isPlaying && inStartGrace()) {
+            // Typically a Bluetooth/car device grabbing focus as our session starts: take it back.
+            logEvent('os: interruption ignored (just started) — re-requesting focus');
+            requestFocus(s.settings.mixWithOthers);
+          } else if (s.isPlaying) {
             wasInterrupted = true;
             s.pause();
           }
@@ -139,15 +173,31 @@ export function useAudioController(): void {
       }),
       AudioManager.addSystemEventListener('routeChange', (event) => {
         const s = useStore.getState();
-        if (event.reason === 'OldDeviceUnavailable' && s.settings.pauseOnDisconnect && s.isPlaying) s.pause();
+        logEvent(`os: route change (${event.reason})`);
+        if (event.reason === 'OldDeviceUnavailable' && s.settings.pauseOnDisconnect && s.isPlaying && !inStartGrace()) s.pause();
       }),
     ];
 
+    const handleRemotePause = (kind: string) => {
+      if (inStartGrace()) {
+        logEvent(`media button: ${kind} ignored (just started)`);
+        // Re-assert the playing state so the device shows the right button.
+        const s = useStore.getState();
+        updateNotification(true, describeMix(s.mix, s.activePresetId), Object.keys(s.mix).length > 0);
+        return;
+      }
+      logEvent(`media button: ${kind}`);
+      useStore.getState().pause();
+    };
+
     const notificationSubs = isNative
       ? [
-          PlaybackNotificationManager.addEventListener('playbackNotificationPlay', () => useStore.getState().play()),
-          PlaybackNotificationManager.addEventListener('playbackNotificationPause', () => useStore.getState().pause()),
-          PlaybackNotificationManager.addEventListener('playbackNotificationStop', () => useStore.getState().pause()),
+          PlaybackNotificationManager.addEventListener('playbackNotificationPlay', () => {
+            logEvent('media button: play');
+            useStore.getState().play();
+          }),
+          PlaybackNotificationManager.addEventListener('playbackNotificationPause', () => handleRemotePause('pause')),
+          PlaybackNotificationManager.addEventListener('playbackNotificationStop', () => handleRemotePause('stop')),
         ]
       : [];
 

@@ -4,6 +4,7 @@ import { AudioContext } from 'react-native-audio-api';
 import type { AudioBuffer, AudioBufferSourceNode, GainNode, WaveShaperNode } from 'react-native-audio-api';
 
 import { SOUND_BY_ID } from './catalog';
+import { describeError, logEvent } from './diagnostics';
 import type { EventLayer } from './catalog';
 import { BED_ASSETS, ONE_SHOT_ASSETS } from './generated/manifest';
 import { buildFadeCurve, sliderToGain, timerFadePlan } from './math';
@@ -13,6 +14,7 @@ const IDLE_CACHE_SIZE = 4;
 const VOICE_FADE_IN = 0.6;
 const VOICE_FADE_OUT = 0.25;
 const PAUSE_FADE = 0.35;
+const RESUME_TIMEOUT_MS = 4000;
 /**
  * Makeup gain after the master volume. Each loop is mastered quietly (≈ −20 to −29 dBFS RMS)
  * so several can be stacked; this lifts a typical mix to a comfortable level, and the soft
@@ -221,6 +223,7 @@ export class AudioEngine {
       })
       .catch((err) => {
         console.warn(`[audio] failed to load ${id}`, err);
+        logEvent(`engine: failed to load ${id} (${describeError(err)})`);
       });
     this.trimCache();
   }
@@ -311,15 +314,28 @@ export class AudioEngine {
   }
 
   private async doPlay(fadeInSeconds: number): Promise<void> {
-    const firstStart = !this.ctx;
-    const ctx = this.ensureContext();
-    if (firstStart) this.setMix(Object.fromEntries(this.desired));
     if (this.suspendTimeout) {
       clearTimeout(this.suspendTimeout);
       this.suspendTimeout = null;
     }
     this.playing = true;
-    if (ctx.state !== 'running') await ctx.resume();
+    let ctx: AudioContext;
+    try {
+      ctx = await this.startContext();
+    } catch (first) {
+      // Output-device changes (Bluetooth, car audio, USB) can leave the native stream unusable.
+      // Rebuild the whole graph once on a fresh context before giving up.
+      logEvent(`engine: start failed (${describeError(first)}), rebuilding audio context`);
+      this.resetContext();
+      try {
+        ctx = await this.startContext();
+      } catch (second) {
+        this.playing = false;
+        logEvent(`engine: start failed again (${describeError(second)})`);
+        throw second;
+      }
+    }
+    logEvent(`engine: running at ${ctx.sampleRate} Hz`);
     const now = ctx.currentTime;
     const g = this.transport.gain;
     g.cancelScheduledValues(now);
@@ -327,6 +343,37 @@ export class AudioEngine {
     g.linearRampToValueAtTime(1, now + Math.max(0.05, fadeInSeconds));
     // context time froze while suspended, so re-anchor the sleep-timer fade
     this.applyTimer();
+  }
+
+  /** Creates (if needed) and resumes the context, failing if it doesn't reach "running" promptly. */
+  private async startContext(): Promise<AudioContext> {
+    const firstStart = !this.ctx;
+    const ctx = this.ensureContext();
+    if (firstStart) this.setMix(Object.fromEntries(this.desired));
+    if (ctx.state !== 'running') {
+      await Promise.race([
+        ctx.resume(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('resume timed out')), RESUME_TIMEOUT_MS)),
+      ]);
+    }
+    if (ctx.state !== 'running') throw new Error(`context is ${ctx.state} after resume`);
+    return ctx;
+  }
+
+  /** Tears down the context and graph but keeps the desired mix, volume and timer. */
+  private resetContext(): void {
+    for (const voice of this.voices.values()) {
+      voice.alive = false;
+      if (voice.eventTimer) clearTimeout(voice.eventTimer);
+    }
+    this.voices.clear();
+    this.buffers.clear();
+    this.oneShots.clear();
+    this.recent = [];
+    [...this.loading].forEach((id) => this.setLoading(id, false));
+    const old = this.ctx;
+    this.ctx = null;
+    old?.close().catch(() => undefined);
   }
 
   private async doPause(): Promise<void> {

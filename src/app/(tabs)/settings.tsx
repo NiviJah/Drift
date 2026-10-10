@@ -112,6 +112,13 @@ export default function SettingsScreen() {
       <Card>
         <SettingRow icon="star-outline" title="Rate Drift" subtitle="It really helps a small app grow." onPress={rate} />
         <Divider />
+        <SettingRow
+          icon="stethoscope"
+          title="Playback diagnostics"
+          subtitle="Sound not starting over Bluetooth or in the car? Share this log."
+          onPress={() => router.push('/diagnostics')}
+        />
+        <Divider />
         <SettingRow icon="shield-lock-outline" title="Privacy" subtitle="No accounts, no tracking. Everything stays on your device." onPress={() => router.push('/privacy')} />
         <Divider />
         <SettingRow icon="delete-outline" title="Reset all data" destructive onPress={confirmReset} />

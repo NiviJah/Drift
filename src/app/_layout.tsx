@@ -55,6 +55,7 @@ export default function RootLayout() {
             <Stack.Screen name="sound/[id]" options={{ presentation: 'modal' }} />
             <Stack.Screen name="nightstand" options={{ presentation: 'fullScreenModal', animation: 'fade' }} />
             <Stack.Screen name="privacy" options={{ headerShown: true, title: 'Privacy Policy' }} />
+            <Stack.Screen name="diagnostics" options={{ headerShown: true, title: 'Playback diagnostics' }} />
           </Stack>
           <ToastHost />
         </View>
