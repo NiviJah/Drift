@@ -1,33 +1,55 @@
 name: Release
 
-# Push a version tag (e.g. `git tag v1.0.1 && git push origin v1.0.1`) to build the
-# Android test APK and publish it as a GitHub Release. Can also be run manually.
+# Builds the Android test APK and publishes it as a GitHub Release.
+#
+# Runs on every push to main that touches app.json or release-notes/: if the version in
+# app.json has no release yet, it builds and publishes `v<version>` (using
+# release-notes/v<version>.md when present). To ship a new version, bump "version" in
+# app.json, add release notes, and push. It can also be started from the Actions tab.
 on:
   push:
-    tags: ['v*']
+    branches: [main]
+    paths: ['app.json', 'release-notes/**']
   workflow_dispatch:
-    inputs:
-      tag:
-        description: Existing tag to build and release (e.g. v1.0.1)
-        required: true
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  group: release
   cancel-in-progress: false
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      exists: ${{ steps.version.outputs.exists }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v$(node -p "require('./app.json').expo.version")"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release $TAG already exists — nothing to do."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Will build and publish $TAG."
+          fi
+
   android:
+    needs: check
+    if: needs.check.outputs.exists == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      TAG: ${{ needs.check.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.TAG }}
 
       - uses: actions/setup-node@v4
         with:
@@ -68,14 +90,10 @@ jobs:
           VERSION="${TAG#v}"
           APK="Drift-${VERSION}.apk"
           cp android/app/build/outputs/apk/release/app-release.apk "$APK"
-          NOTES_FILE="release-notes/${TAG}.md"
-          if [ -f "$NOTES_FILE" ]; then NOTES=$(cat "$NOTES_FILE"); else NOTES="Drift ${VERSION}"; fi
-          NOTES="${NOTES}
-
-          ---
-          **Install on Android:** download \`${APK}\` on your phone, open it and allow installs from your browser or file manager when asked. This is a debug-signed test build (not for the Play Store)."
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$APK" --clobber
-          else
-            gh release create "$TAG" "$APK" --title "Drift ${VERSION}" --notes "$NOTES" --prerelease
-          fi
+          {
+            if [ -f "release-notes/${TAG}.md" ]; then cat "release-notes/${TAG}.md"; else echo "Drift ${VERSION}"; fi
+            echo
+            echo "---"
+            echo "**Install on Android:** download \`${APK}\` on your phone, open it and allow installs from your browser or file manager when asked. Works on 32- and 64-bit ARM phones. This is a debug-signed test build (not for the Play Store)."
+          } > notes.md
+          gh release create "$TAG" "$APK" --target "$GITHUB_SHA" --title "Drift ${VERSION}" --notes-file notes.md --prerelease
